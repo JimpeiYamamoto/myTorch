@@ -123,10 +123,11 @@ class MyResNet(nn.Module):
         self.relu2 = nn.ReLU(inplace=True)
         self.fc1 = nn.Linear(512 * block.expansion, 512)
         self.relu3 = nn.ReLU(inplace=True)
-        self.dropout1 = nn.Dropout2d(0.2)
+        self.dropout1 = nn.Dropout(0.2)
         self.fc2 = nn.Linear(512, 128)
-        self.dropout2 = nn.Dropout2d(0.2)
-        self.bn2 = nn.BatchNorm2d(128)
+        self.relu3 = nn.ReLU(inplace=True)
+        self.dropout2 = nn.Dropout(0.2)
+        self.bn2 = nn.BatchNorm1d(128)
         self.fc3 = nn.Linear(128, num_classes)
         '''
         Customize↑
