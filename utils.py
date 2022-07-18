@@ -6,6 +6,11 @@ import torch
 from sklearn.metrics import confusion_matrix
 import seaborn as sns
 import matplotlib.pyplot as plt
+import torchvision
+import numpy as np
+import pandas as pd
+from sklearn.neighbors import KernelDensity
+from sklearn.metrics import roc_curve, roc_auc_score
 
 class utils():
 
@@ -99,6 +104,17 @@ class utils():
         df['outputs'] = outputs.argmax(1)
         df['iscorrect'] = correct_lst
         df.to_csv(outcome_df_path)
+    
+    def plot_epoch_to_loss(num_epoch, train_loss_list, val_loss_list):
+        plt.figure()
+        plt.plot(range(num_epoch), train_loss_list, color='blue', linestyle='-', label = 'train_loss')
+        plt.plot(range(num_epoch), val_loss_list, color='green', linestyle='--', label = 'val_loss')
+        plt.legend()
+        plt.xlabel('epoch')
+        plt.ylabel('loss')
+        plt.title('Training and validation loss')
+        plt.grid()
+
 
     def plot_epoch_to_loss_acc(num_epoch, train_loss_list, val_loss_list, train_acc_list, val_acc_list):
         plt.figure()
@@ -118,3 +134,126 @@ class utils():
         plt.ylabel('acc')
         plt.title('Training and validation acc')
         plt.grid()
+
+    def imshow(img):
+        img = torchvision.utils.make_grid(img)
+        img = img / 2 + 0.5
+        npimg = img.detach().numpy()
+        plt.imshow(np.transpose(npimg, (1, 2, 0)))
+        plt.show()
+
+    def cnt_each_class_labels(dataset):
+        cnt_0 = 0
+        cnt_1 = 0
+        cnt_2 = 0
+        for label in dataset.labels:
+            if label == 0:
+                cnt_0+=1
+            elif label == 1:
+                cnt_1+=1
+            else:
+                cnt_2+=1
+        print("class0: ", cnt_0)
+        print("class1: ", cnt_1)
+        print("class2: ", cnt_2)
+    
+    def plot_matrix(labels_lst, outputs_lst):
+        cm = confusion_matrix(labels_lst, outputs_lst)
+        sns.heatmap(cm)
+        print(cm)
+
+    def plot_hist_line(correct_lst, incorrect_lst, min_, max_, bandwidth):
+        fig = plt.figure()
+        ax1 = fig.add_subplot(111)
+        ax1.hist(correct_lst, alpha=0.3, label="correct")
+        ax1.hist(incorrect_lst, alpha=0.3, label="error")
+        ax1.set_xlabel("model uncertainty")
+        ax1.set_ylabel("density")
+        plt.legend()
+        ax2 = ax1.twinx()
+        x = np.linspace(min_, max_, 2000)[:,None]
+        df_co = pd.DataFrame()
+        df_co['correct'] = correct_lst
+        kde1 = KernelDensity(kernel='gaussian', bandwidth=bandwidth).fit(np.array(df_co['correct'][:,None]))
+        dens1 = kde1.score_samples(x)
+        ax2.plot(x, np.exp(dens1))
+        df_in = pd.DataFrame()
+        df_in['incorrect'] = incorrect_lst
+        kde2 = KernelDensity(kernel='gaussian', bandwidth=bandwidth).fit(np.array(df_in['incorrect'][:,None]))
+        dens2 = kde2.score_samples(x)
+        ax2.plot(x, np.exp(dens2))
+
+    def plt_roc_auc(outcome_lst, model_uncertainty_lst, data_uncertainty_lst):
+        fpr, tpr, _ = roc_curve(outcome_lst, model_uncertainty_lst)
+        plt.plot(fpr, tpr, label='model uncertainty')
+        plt.fill_between(fpr, tpr, 0, alpha=0.3)
+        fpr, tpr, _ = roc_curve(outcome_lst, data_uncertainty_lst)
+        plt.plot(fpr, tpr, label='data uncertainty')
+        plt.fill_between(fpr, tpr, 0, alpha=0.3)
+        plt.xlabel('FPR')
+        plt.ylabel('TPR')
+        plt.legend()
+        plt.show()
+        print(f'model uncertaity AUC: {roc_auc_score(outcome_lst, model_uncertainty_lst):.4f}')
+        print(f'data uncertainty AUC: {roc_auc_score(outcome_lst, data_uncertainty_lst):.4f}')
+
+    def under_sample_alt_class(info, df):
+        num_class = info[0].shape[0]
+        num_range = info[0].shape[1]
+        min_cnt = info[0][0][0]
+        for i in range(num_class):
+            for j in range(num_range):
+                min_cnt = min([min_cnt, info[0][i][j]])
+        df_train_equal = pd.DataFrame()
+        for i in range(len(info[1]) - 1):
+            start = info[1][i]
+            stop = info[1][i+1]
+            df0 = df.copy()[df['class0'].copy() == 1]
+            df1 = df.copy()[df['class1'].copy() == 1]
+            df2 = df.copy()[df['class2'].copy() == 1]
+            tmp_df0 = df0.copy()[(df0['ALT'] > start) & (df0['ALT'] <= stop)].sample(n = int(min_cnt)-2)
+            tmp_df1 = df1.copy()[(df1['ALT'] > start) & (df1['ALT'] <= stop)].sample(n = int(min_cnt)-2)
+            tmp_df2 = df2.copy()[(df2['ALT'] > start) & (df2['ALT'] <= stop)].sample(n = int(min_cnt)-2)
+            df_train_equal = pd.concat([df_train_equal.copy(), tmp_df0, tmp_df1, tmp_df2])
+        return df_train_equal
+
+
+    def hist_class(df, col_name, bins):
+        info = plt.hist(
+            [
+                df[col_name][df['class0']==1],
+                df[col_name][df['class1']==1],
+                df[col_name][df['class2']==1]
+            ],
+            bins=bins,
+            stacked=True,
+            label=['class0', 'class1', 'class2']
+        )
+        plt.legend()
+        plt.grid()
+        for i in range(len(info[1]) - 1):
+            print(
+                "[{:7} ~ {:7}] ".format(int(info[1][i] * 100) / 100, int(info[1][i+1] * 100) / 100),
+                " 0: {:7}, ".format(int(info[0][0][i])),
+                " 1: {:7}, ".format(int(info[0][1][i] - info[0][0][i])),
+                " 2: {:7}".format(int(info[0][2][i] - info[0][1][i]))
+            )
+        plt.show()
+        return info
+
+    def plt_time_alt_tem(df):
+        plt.rcParams["figure.figsize"] = [20, 6]
+        plt.grid()
+        plt.plot(df['date'], df['ALT'])
+        plt.plot(df['date'], df['tem'])
+        plt.show()
+        len_df = len(df['date'])
+        tanni = int(len_df/10)
+        for i in range(10):
+            i = tanni * i
+            print("index: ", i)
+            plt.plot(pd.to_datetime(df['date']).iloc[i:i+tanni], df['ALT'].iloc[i:i+tanni])
+            plt.plot(pd.to_datetime(df['date']).iloc[i:i+tanni], df['tem'].iloc[i:i+tanni])
+            plt.ylim([0, 25])
+            plt.grid()
+            plt.show()
