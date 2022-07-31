@@ -17,6 +17,36 @@ from sklearn.model_selection import train_test_split
 from tqdm import tqdm
 import copy
 
+class ImageTempDataset(torch.utils.data.Dataset):
+    classes = ['0', '1', '2']
+    data_transforms = transforms.Compose([
+        transforms.ToTensor(),
+    ])
+    
+    def __init__(self, csv_path, img_path, transform=data_transforms):
+        self.img_path = img_path
+        self.transform = transform
+        df = pd.read_csv(csv_path, index_col=0)
+        self.images = list(df['img_path'])
+        self.temps = list(df['tem'])
+        self.labels = list(df['class'])
+        
+    def __getitem__(self, index):
+        image = self.images[index]
+        image = os.path.join(self.img_path, image)
+        with open(image, 'rb') as f:
+            image = Image.open(f)
+            image = image.convert('RGB')
+        if self.transform is not None:
+            image = self.transform(image)
+        temp = self.temps[index]
+        label = self.labels[index]
+        return image, temp, label
+    
+    def __len__(self):
+        return len(self.images)
+        
+
 class CustomDataset(torch.utils.data.Dataset): 
     classes = ['0', '1', '2']
     data_transforms = transforms.Compose([
